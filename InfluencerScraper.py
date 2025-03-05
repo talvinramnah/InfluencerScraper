@@ -1,5 +1,4 @@
 import streamlit as st
-#from apify_client import ApifyClient  # Keep this import if you need to use the client functions
 import openai
 from apify_client import ApifyClient
 import gspread
@@ -235,16 +234,18 @@ def main():
             if profile_data is None:
                 continue
             
-            # Filtering criteria for the IB/ed-tech space: lower thresholds are applied.
-            if profile_data["followers_count"] > 1000 and profile_data["posts_count"] > 5:
+            # Apply the updated filtering criteria:
+            # - Followers over 1000
+            # - Posts over 20
+            if profile_data["followers_count"] > 1000 and profile_data["posts_count"] > 20:
                 median_likes, median_comments = get_last_5_posts_stats(username, limit=30)
                 if profile_data["followers_count"] > 0:
                     engagement_rate = ((median_likes + median_comments) / profile_data["followers_count"]) * 100
                 else:
                     engagement_rate = 0
                 
-                # Only include profiles with an engagement rate of at least 0.5%
-                if engagement_rate < 0.5:
+                # Only include profiles with an engagement rate of at least 0.25%
+                if engagement_rate < 0.25:
                     logging.info(f"Skipping {username} due to low engagement rate: {engagement_rate:.2f}%")
                     continue
                 
