@@ -69,8 +69,32 @@ except Exception:
     logging.info("Hashtags worksheet created with header row.")
 
 # ---------------------------------------------------
-# 2. HELPER FUNCTIONS
+# 2. HELPER FUNCTIONS (GLOBAL)
 # ---------------------------------------------------
+
+def user_already_in_sheet(username: str) -> bool:
+    """
+    Checks if a username is already present in the main worksheet.
+    """
+    try:
+        usernames_col = main_worksheet.col_values(2)  # Username is in the second column.
+        return username in usernames_col
+    except Exception as e:
+        logging.error(f"Error checking existing usernames in sheet: {e}")
+        return False
+
+def append_hashtags_to_sheet(input_str: str, hashtags: list):
+    """
+    Store the entered hashtags in the 'Hashtags' worksheet.
+    """
+    from datetime import datetime
+    try:
+        hashtags_str = ", ".join(hashtags)
+        row = [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), input_str, hashtags_str]
+        hashtag_worksheet.append_row(row)
+        logging.info("Hashtags appended to 'Hashtags' worksheet.")
+    except Exception as e:
+        logging.error(f"Error appending hashtags to sheet: {e}")
 
 # ----- Instagram Functions -----
 def fetch_owner_usernames_from_hashtags_instagram(hashtags: list, results_limit: int) -> set:
@@ -87,7 +111,6 @@ def fetch_owner_usernames_from_hashtags_instagram(hashtags: list, results_limit:
                 "hashtags": [htag],
                 "resultsLimit": results_limit
             }
-            # Using the Instagram hashtag scraper actor
             run = client.actor("reGe1ST3OBgYZSsZJ").call(run_input=run_input)
             for item in client.dataset(run["defaultDatasetId"]).iterate_items():
                 if "ownerUsername" in item:
@@ -146,6 +169,24 @@ def get_last_5_posts_stats_instagram(username: str, limit: int = 30):
         logging.error(f"Instagram: Error scraping posts for {username}: {e}")
         return 0, 0
 
+def append_profile_to_sheet_instagram(profile_data: dict, median_comments: int, median_likes: int, engagement_rate: float):
+    """
+    Append Instagram profile data to the main worksheet.
+    """
+    row = [
+        profile_data["profile_pic_url"],
+        profile_data["username"],
+        profile_data["posts_count"],
+        profile_data["followers_count"],
+        profile_data["biography"],
+        f"https://www.instagram.com/{profile_data['username']}",
+        str(median_comments),
+        str(median_likes),
+        f"{engagement_rate:.2f}"
+    ]
+    main_worksheet.append_row(row)
+    logging.info(f"Stored Instagram profile data for {profile_data['username']}")
+
 # ----- TikTok Functions -----
 def fetch_owner_usernames_from_hashtags_tiktok(hashtags: list, results_per_page: int) -> (set, dict):
     """
@@ -168,7 +209,6 @@ def fetch_owner_usernames_from_hashtags_tiktok(hashtags: list, results_per_page:
             }
             run = client.actor("f1ZeP0K58iwlqG2pY").call(run_input=run_input)
             for item in client.dataset(run["defaultDatasetId"]).iterate_items():
-                # Extract username from authorMeta.nickName
                 try:
                     username = item["authorMeta"]["nickName"]
                 except Exception:
@@ -219,13 +259,12 @@ def scrape_profile_info_tiktok(username: str):
 def get_last_5_posts_stats_tiktok(username: str, posts_by_user: dict):
     """
     For TikTok, use the posts already collected from the hashtag scraper.
-    Filter posts by the given username, sort by creation time, then compute median of diggCount (likes) and commentCount.
+    Filter posts by the given username, sort by creation time, then compute median diggCount (likes) and commentCount.
     """
     user_posts = posts_by_user.get(username, [])
     if not user_posts:
         logging.warning(f"TikTok: No posts found for {username} in hashtag scrape.")
         return 0, 0
-    # Sort posts by createTime (assuming 'createTime' exists)
     user_posts.sort(key=lambda x: x.get("createTime", 0), reverse=True)
     recent_posts = user_posts[:5]
     likes_list = [int(post.get("diggCount", 0)) for post in recent_posts]
@@ -236,9 +275,9 @@ def get_last_5_posts_stats_tiktok(username: str, posts_by_user: dict):
     median_comments = int(np.median(comments_list))
     return median_likes, median_comments
 
-def append_profile_to_sheet(profile_data: dict, median_comments: int, median_likes: int, engagement_rate: float):
+def append_profile_to_sheet_tiktok(profile_data: dict, median_comments: int, median_likes: int, engagement_rate: float):
     """
-    Append the qualifying profile data along with engagement metrics to the main worksheet.
+    Append TikTok profile data along with engagement metrics to the main worksheet.
     """
     row = [
         profile_data["profile_pic_url"],
@@ -252,38 +291,7 @@ def append_profile_to_sheet(profile_data: dict, median_comments: int, median_lik
         f"{engagement_rate:.2f}"
     ]
     main_worksheet.append_row(row)
-    logging.info(f"Stored profile data for {profile_data['username']}")
-
-def append_profile_to_sheet_instagram(profile_data: dict, median_comments: int, median_likes: int, engagement_rate: float):
-    """
-    Append Instagram profile data to the sheet.
-    """
-    row = [
-        profile_data["profile_pic_url"],
-        profile_data["username"],
-        profile_data["posts_count"],
-        profile_data["followers_count"],
-        profile_data["biography"],
-        f"https://www.instagram.com/{profile_data['username']}",
-        str(median_comments),
-        str(median_likes),
-        f"{engagement_rate:.2f}"
-    ]
-    main_worksheet.append_row(row)
-    logging.info(f"Stored Instagram profile data for {profile_data['username']}")
-
-def append_hashtags_to_sheet(input_str: str, hashtags: list):
-    """
-    Store the entered hashtags in the 'Hashtags' worksheet.
-    """
-    from datetime import datetime
-    try:
-        hashtags_str = ", ".join(hashtags)
-        row = [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), input_str, hashtags_str]
-        hashtag_worksheet.append_row(row)
-        logging.info("Hashtags appended to 'Hashtags' worksheet.")
-    except Exception as e:
-        logging.error(f"Error appending hashtags to sheet: {e}")
+    logging.info(f"Stored TikTok profile data for {profile_data['username']}")
 
 # ---------------------------------------------------
 # 3. STREAMLIT APP
@@ -294,12 +302,10 @@ def main():
     # Platform toggle: Instagram or TikTok
     platform = st.selectbox("Select Platform", options=["Instagram", "TikTok"])
     
-    st.write(
-        "Please enter comma-separated hashtags (e.g. #InternationalBaccalaureate, #IBExams, #IBDiploma):"
-    )
+    st.write("Please enter comma-separated hashtags (e.g. #InternationalBaccalaureate, #IBExams, #IBDiploma):")
     hashtags_input = st.text_input("Hashtags", "")
     
-    # For Instagram, use resultsLimit; for TikTok, use resultsPerPage.
+    # For Instagram use resultsLimit; for TikTok use resultsPerPage.
     results_input = st.number_input("How many posts per hashtag to scrape?", min_value=1, max_value=1000, value=50)
     
     if st.button("Scrape Influencers"):
@@ -307,7 +313,6 @@ def main():
             st.error("Please enter at least one hashtag.")
             return
         
-        # Parse hashtags from input
         hashtags = [tag.strip() for tag in hashtags_input.split(",") if tag.strip()]
         if not hashtags:
             st.error("No valid hashtags entered.")
@@ -316,16 +321,12 @@ def main():
         st.success(f"Using {len(hashtags)} hashtags: {', '.join(hashtags)}")
         append_hashtags_to_sheet(hashtags_input, hashtags)
         
-        # Define filtering criteria (both platforms):
-        # - Followers > 1000
-        # - Posts > 20
-        # - Engagement rate >= 0.25%
+        # Filtering criteria
         min_followers = 1000
         min_posts = 20
         min_engagement = 0.25
         
         if platform == "Instagram":
-            # Instagram flow
             unique_usernames = fetch_owner_usernames_from_hashtags_instagram(hashtags, results_input)
             for username in unique_usernames:
                 if username and user_already_in_sheet(username):
@@ -346,7 +347,6 @@ def main():
                     append_profile_to_sheet_instagram(profile_data, median_comments, median_likes, engagement_rate)
                     
         elif platform == "TikTok":
-            # TikTok flow
             unique_usernames, posts_by_user = fetch_owner_usernames_from_hashtags_tiktok(hashtags, results_input)
             for username in unique_usernames:
                 if username and user_already_in_sheet(username):
@@ -364,7 +364,7 @@ def main():
                     if engagement_rate < min_engagement:
                         logging.info(f"TikTok: Skipping {username} due to low engagement rate: {engagement_rate:.2f}%")
                         continue
-                    append_profile_to_sheet(profile_data, median_comments, median_likes, engagement_rate)
+                    append_profile_to_sheet_tiktok(profile_data, median_comments, median_likes, engagement_rate)
         
         st.success("Scraping and data append complete. Please check Google Sheets for results.")
 
